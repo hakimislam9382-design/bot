@@ -1,3 +1,4 @@
+
 import telebot
 import yfinance as yf
 from flask import Flask
@@ -5,7 +6,6 @@ import threading
 import time
 
 BOT_TOKEN = "8966694832:AAHGPoRrGZBs6zCHm8FXRmeFsbHnwlKifDU"
-
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
@@ -15,58 +15,31 @@ def home():
 
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "✅ Bot Active!\n\nUse: /signal EUR/USD\n/signal USD/JPY\n/signal GBP/USD")
+    bot.reply_to(m, "✅ Bot Active!\n\nUse: /signal EUR/USD\n/signal USD/JPY")
 
 @bot.message_handler(commands=['signal'])
 def signal(m):
     try:
         parts = m.text.split()
         if len(parts) < 2:
-            bot.reply_to(m, "❌ Use: /signal EUR/USD")
+            bot.reply_to(m, "❌ Use: /signal EUR/USD\nExample: /signal USD/JPY")
             return
 
-        pair = parts[1].upper()
-        # OTC Remove
-        pair = pair.replace("-OTC","").replace("OTC","").strip()
-
+        pair = parts[1].upper().replace("-OTC","").replace("OTC","").strip()
         symbol = pair.replace("/", "") + "=X"
 
-        data = yf.download(symbol, period="1d", interval="1m", progress=False)
-        if len(data) == 0:
+        df = yf.download(symbol, period="2d", interval="1m", progress=False)
+
+        if df.empty:
             bot.reply_to(m, f"❌ Data not found for {pair}")
             return
 
-        close = data['Close'].iloc[-1]
-
-        # Simple EMA + RSI Logic
-        ema9 = data['Close'].ewm(span=9).mean().iloc[-1]
-        ema21 = data['Close'].ewm(span=21).mean().iloc[-1]
-
-        direction = "🟢 BUY - CALL ⬆️" if ema9 > ema21 else "🔴 SELL - PUT ⬇️"
-
-        msg = f"""📊 *Quotex Signal*
-
-💱 *Pair:* {pair}
-⏰ *Timeframe:* 1 Minute
-📈 *Direction:* {direction}
-💰 *Price:* {float(close):.5f}
-
-📊 *Indicators:* EMA 9/21 + RSI 14
-🇧🇩 *Time:* {time.strftime('%I:%M:%S %p')}
-📡 *Source:* yfinance
-
-⚠️ Risk Warning: Trading is risky. Use proper money management.
----------------------------"""
-        bot.reply_to(m, msg, parse_mode="Markdown")
-
-    except Exception as e:
-        bot.reply_to(m, f"Error: {str(e)}")
-
-def run_flask():
-    app.run(host='0.0.0.0', port=10000)
-
-# Run Flask in background
-threading.Thread(target=run_flask).start()
-
-print("Bot Started...")
-bot.infinity_polling()
+        # Fix for yfinance new version
+        if 'Close' in df.columns:
+            close_series = df['Close']
+            if hasattr(close_series, 'iloc'):
+                # if multi column
+                try:
+                    last_close = float(close_series.iloc[-1].iloc[-1] if hasattr(close_series.iloc[-1], 'iloc') else close_series.iloc[-1])
+                except:
+                    last_close = float(close_series.values[-1][-1] if len
