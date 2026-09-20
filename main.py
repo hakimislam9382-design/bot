@@ -15,24 +15,35 @@ def home():
 
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "✅ Bot Active!\n\nUse:\n/signal EUR/USD\n/signal USD/JPY\n/signal USD/BRL")
+    bot.reply_to(m, "✅ Bot Active!\n\nUse:\n/signal EUR/USD\n/signal USD/BRL")
 
 @bot.message_handler(commands=['signal'])
 def signal(m):
     try:
-        # /signal USD/BRL - OTC হলে 2 টা ভাগ হয়, তাই ঠিক করলাম
         text = m.text.replace("/signal", "").strip().upper()
         if not text:
             bot.reply_to(m, "❌ Use: /signal EUR/USD")
             return
-
         pair = text.replace("-OTC","").replace(" OTC","").replace("OTC","").strip()
         symbol = pair.replace("/", "") + "=X"
-
         df = yf.download(symbol, period="2d", interval="1m", progress=False, auto_adjust=True)
-
         if df.empty:
-            bot.reply_to(m, f"❌ Data not found for {pair}")
+            bot.reply_to(m, f"❌ Data not found {pair}")
             return
+        close = df['Close']
+        if hasattr(close, 'columns'):
+            close = close.iloc[:, 0]
+        last = float(close.iloc[-1])
+        e9 = float(close.ewm(span=9).mean().iloc[-1])
+        e21 = float(close.ewm(span=21).mean().iloc[-1])
+        direction = "🟢 BUY - CALL ⬆️" if e9 > e21 else "🔴 SELL - PUT ⬇️"
+        msg = f"📊 Quotex Signal\n\n💱 Pair: {pair}\n📈 Signal: {direction}\n💰 Price: {last:.5f}\n\nEMA 9/21\n🇧🇩 {time.strftime('%I:%M %p')}"
+        bot.reply_to(m, msg)
+    except Exception as e:
+        bot.reply_to(m, f"Error: {e}")
 
-        # Fix for yfinance bug
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+
+threading.Thread(target=run_flask, daemon=True).start()
+bot.infinity_polling()
