@@ -1,11 +1,11 @@
-
+import os
 import telebot
 import yfinance as yf
 from flask import Flask
 import threading
 import time
 
-BOT_TOKEN = "8966694832:AAHGPoRrGZBs6zCHm8FXRmeFsbHnwlKifDU"
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "8966694832:AAHGPoRrGZBs6zCHm8FXRmeFsbHnwlKifDU"
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
@@ -15,31 +15,24 @@ def home():
 
 @bot.message_handler(commands=['start'])
 def start(m):
-    bot.reply_to(m, "✅ Bot Active!\n\nUse: /signal EUR/USD\n/signal USD/JPY")
+    bot.reply_to(m, "✅ Bot Active!\n\nUse:\n/signal EUR/USD\n/signal USD/JPY\n/signal USD/BRL")
 
 @bot.message_handler(commands=['signal'])
 def signal(m):
     try:
-        parts = m.text.split()
-        if len(parts) < 2:
-            bot.reply_to(m, "❌ Use: /signal EUR/USD\nExample: /signal USD/JPY")
+        # /signal USD/BRL - OTC হলে 2 টা ভাগ হয়, তাই ঠিক করলাম
+        text = m.text.replace("/signal", "").strip().upper()
+        if not text:
+            bot.reply_to(m, "❌ Use: /signal EUR/USD")
             return
 
-        pair = parts[1].upper().replace("-OTC","").replace("OTC","").strip()
+        pair = text.replace("-OTC","").replace(" OTC","").replace("OTC","").strip()
         symbol = pair.replace("/", "") + "=X"
 
-        df = yf.download(symbol, period="2d", interval="1m", progress=False)
+        df = yf.download(symbol, period="2d", interval="1m", progress=False, auto_adjust=True)
 
         if df.empty:
             bot.reply_to(m, f"❌ Data not found for {pair}")
             return
 
-        # Fix for yfinance new version
-        if 'Close' in df.columns:
-            close_series = df['Close']
-            if hasattr(close_series, 'iloc'):
-                # if multi column
-                try:
-                    last_close = float(close_series.iloc[-1].iloc[-1] if hasattr(close_series.iloc[-1], 'iloc') else close_series.iloc[-1])
-                except:
-                    last_close = float(close_series.values[-1][-1] if len
+        # Fix for yfinance bug
